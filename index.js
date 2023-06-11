@@ -26,6 +26,31 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
+
+    const usersCollection = client.db('rhythmDB').collection('users');
+
+    // users related API
+
+    app.post('/users', async(req,res) => {
+        const user = req.body;
+        console.log(user)
+        const query = {email: user.email}
+
+        const existingUser = await usersCollection.findOne(query);
+        
+         if (existingUser) {
+           return res.send({ message: 'user already exists' });
+         }
+
+         const result = await usersCollection.insertOne(user);
+         res.send(result);
+    })
+
+
+
+
+
+
     // Send a ping to confirm a successful connection
     await client.db('admin').command({ ping: 1 });
     console.log('Pinged your deployment. You successfully connected to MongoDB!');
