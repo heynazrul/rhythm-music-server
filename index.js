@@ -55,8 +55,19 @@ async function run() {
       res.send({ token });
     });
 
+    // middleware to verify admin
+    const verifyAdmin = async(req,res,next) => {
+      const email = req.decoded.email
+      const query = {email: email}
+      const user = await usersCollection.findOne(query)
+      if(user?.role !== 'admin') {
+        return res.status(403).send({error: true, message: 'forbidden access!'})
+      }
+      next()
+    }
+
     // users related API
-    app.get('/users', async (req, res) => {
+    app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
@@ -86,6 +97,11 @@ async function run() {
       res.send(result)
     });
 
+    app.get('/users/instructor/:id', async(req, res) => {
+      
+    });
+
+    // update user role
     app.patch('/users/admin/:id', async (req, res) => {
       const id = req.params.id;
       console.log(id);
