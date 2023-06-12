@@ -87,10 +87,15 @@ async function run() {
     };
 
     // users related API
-    app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
+    app.get('/users', async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
+
+    // app.get('/users/check-role', async (req, res) => {
+    //   const result = await usersCollection.find().toArray();
+    //   res.send(result);
+    // });
 
     app.post('/users', async (req, res) => {
       const user = req.body;
@@ -161,6 +166,34 @@ async function run() {
         },
       };
       const result = await usersCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    // add selected class in user database
+    app.patch('/users/selectedClassId/:email', async (req, res) => {
+      const email = req.params.email;
+      const classId = req.body.classId;
+      console.log(email, classId);
+      const filter = { email: email };
+      const updateDoc = {
+        $addToSet: {
+          selectedClassId: classId,
+        },
+      };
+      const result = await usersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
+    // get selected class data
+    app.get('/users/selectedClassId/:email', async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      const selectedClassId = user.selectedClassId;
+      const convertedId = selectedClassId.map((id) => new ObjectId(id));
+      console.log(convertedId);
+      const result = await classesCollection.find({ _id: { $in: convertedId } }).toArray();
+
       res.send(result);
     });
 
