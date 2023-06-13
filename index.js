@@ -48,7 +48,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const usersCollection = client.db('rhythmDB').collection('users');
     const classesCollection = client.db('rhythmDB').collection('classes');
@@ -194,13 +194,28 @@ async function run() {
     });
 
     // get selected classId by of requested user
-    app.get('/users/selectedClassId/:email', async (req, res) => {
+    app.get('/users/selectedClassId/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
       const user = await usersCollection.findOne(query);
       const selectedClassId = user.selectedClassId;
+      // console.log(!selectedClassId);
+      // if(!selectedClassId) {
+      //   return
+      // }
       const convertedId = selectedClassId.map((id) => new ObjectId(id));
       // console.log(convertedId);
+      const result = await classesCollection.find({ _id: { $in: convertedId } }).toArray();
+      res.send(result);
+    });
+
+    // student only route get enrolled class
+    app.get('/student/enrolled-classes/:email', async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      const enrolledClassId = user.enrolledClassId;
+      const convertedId = enrolledClassId.map((id) => new ObjectId(id));
       const result = await classesCollection.find({ _id: { $in: convertedId } }).toArray();
       res.send(result);
     });
@@ -288,23 +303,19 @@ async function run() {
         currency: 'usd',
         payment_method_types: ['card'],
       });
-      // console.log(paymentIntent);
       res.send({
         clientSecret: paymentIntent.client_secret,
       });
     });
 
-    // store payment data
-    app.post('/student/payments', async (req, res) => {
+    // store payment data by only student
+    app.post('/student/payments', verifyJWT, verifyStudent, async (req, res) => {
       const payment = req.body;
       const result = await paymentsCollection.insertOne(payment);
 
       // Update the class collection
       const classId = payment.classId;
-      await classesCollection.updateOne(
-        { _id: new ObjectId(classId) },
-        { $inc: { seats: -1 , enrolled: 1 } }
-      );
+      await classesCollection.updateOne({ _id: new ObjectId(classId) }, { $inc: { seats: -1, enrolled: 1 } });
 
       // Update the user collection
       const userEmail = payment.email;
@@ -312,6 +323,9 @@ async function run() {
       const updateSelectedClassId = {
         $pull: {
           selectedClassId: classId,
+        },
+        $push: {
+          enrolledClassId: classId,
         },
       };
       await usersCollection.updateOne(query, updateSelectedClassId);
