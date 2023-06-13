@@ -3,6 +3,7 @@ const app = express();
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 // middleware
@@ -86,20 +87,15 @@ async function run() {
       next();
     };
 
-// =======================/     /=============================================
-//                      USER RELATED
-// ========================/    /===========================================
+    // =======================/     /=============================================
+    //                      USER RELATED
+    // ========================/    /===========================================
 
     // users related API
     app.get('/users', async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
-
-    // app.get('/users/check-role', async (req, res) => {
-    //   const result = await usersCollection.find().toArray();
-    //   res.send(result);
-    // });
 
     app.post('/users', async (req, res) => {
       const user = req.body;
@@ -113,7 +109,7 @@ async function run() {
       res.send(result);
     });
 
-    // Check user role 
+    // Check admin user role
     app.get('/users/admin/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
       if (req.decoded.email !== email) {
@@ -125,6 +121,7 @@ async function run() {
       res.send(result);
     });
 
+    // check instructor user role
     app.get('/users/instructor/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
 
@@ -137,6 +134,7 @@ async function run() {
       res.send(result);
     });
 
+    // check student user role
     app.get('/users/student/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
       if (req.decoded.email !== email) {
@@ -161,6 +159,7 @@ async function run() {
       res.send(result);
     });
 
+    // update user role by ***INSTRUCTOR***
     app.patch('/users/instructor/:id', verifyJWT, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -188,7 +187,7 @@ async function run() {
       res.send(result);
     });
 
-    // get selected classId by individual user
+    // get selected classId by of requested user
     app.get('/users/selectedClassId/:email', async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
@@ -200,8 +199,11 @@ async function run() {
       res.send(result);
     });
 
-    // =============================/   /===========================================
-    // Class Related API
+    // =======================/     /=============================================
+    //                      CLASS RELATED API
+    // ========================/    /===========================================
+
+    // Get all classes data
     app.get('/classes', async (req, res) => {
       const result = await classesCollection.find().toArray();
       res.send(result);
@@ -209,20 +211,19 @@ async function run() {
 
     // get only APPROVED classes
     app.get('/approved-classes', async (req, res) => {
-      // const query = { status: approved };
-      const result = await classesCollection.find({ status: 'approved' }).toArray()
+      const result = await classesCollection.find({ status: 'approved' }).toArray();
       res.send(result);
     });
 
-    // verify instructor and jwt to add new class
+    // add new class to database ==> by verifying instructor
     app.post('/classes', verifyJWT, verifyInstructor, async (req, res) => {
       const newClass = req.body;
       const result = await classesCollection.insertOne(newClass);
       res.send(result);
     });
 
-    // verify admin to update class status
-    app.patch('/classes/approved/:id', async (req, res) => {
+    // update class status "approved" ==> by verifying admin
+    app.patch('/classes/approved/:id', verifyJWT, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const updateDoc = {
@@ -234,6 +235,7 @@ async function run() {
       res.send(result);
     });
 
+    // update class status "denied" ==> by verifying admin
     app.patch('/classes/denied/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -246,7 +248,7 @@ async function run() {
       res.send(result);
     });
 
-    // send feedback verify admin
+    // send feedback to instructor ==> by verifying admin
     app.patch('/classes/feedback/:id', verifyJWT, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const feedback = req.body.feedback;
@@ -260,6 +262,31 @@ async function run() {
       const result = await classesCollection.updateOne(query, updateDoc);
       res.send(result);
     });
+
+    // =======================/     /=============================================
+    //                      PAYMENT RELATED API
+    // ========================/    /===========================================
+
+    // create payment intent
+    app.post('/create-payment-intent', async(req, res) => {
+      const {price} = req.body;
+      const amount = price*100
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card']
+      })
+      
+      res.send({
+        clientSecret: paymentIntent.client_secret
+      })
+    })
+
+
+
+
+
+
 
     // Send a ping to confirm a successful connection
     await client.db('admin').command({ ping: 1 });
