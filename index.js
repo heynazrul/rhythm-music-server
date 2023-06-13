@@ -86,6 +86,10 @@ async function run() {
       next();
     };
 
+// =======================/     /=============================================
+//                      USER RELATED
+// ========================/    /===========================================
+
     // users related API
     app.get('/users', async (req, res) => {
       const result = await usersCollection.find().toArray();
@@ -109,6 +113,7 @@ async function run() {
       res.send(result);
     });
 
+    // Check user role 
     app.get('/users/admin/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
       if (req.decoded.email !== email) {
@@ -134,7 +139,6 @@ async function run() {
 
     app.get('/users/student/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
-
       if (req.decoded.email !== email) {
         res.send({ student: false });
       }
@@ -169,7 +173,7 @@ async function run() {
       res.send(result);
     });
 
-    // add selected class in user database
+    // add Student selected classId in user database
     app.patch('/users/selectedClassId/:email', async (req, res) => {
       const email = req.params.email;
       const classId = req.body.classId;
@@ -184,7 +188,7 @@ async function run() {
       res.send(result);
     });
 
-    // get selected class data
+    // get selected classId by individual user
     app.get('/users/selectedClassId/:email', async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
@@ -193,14 +197,20 @@ async function run() {
       const convertedId = selectedClassId.map((id) => new ObjectId(id));
       console.log(convertedId);
       const result = await classesCollection.find({ _id: { $in: convertedId } }).toArray();
-
       res.send(result);
     });
 
     // =============================/   /===========================================
-    // Menu Related API
+    // Class Related API
     app.get('/classes', async (req, res) => {
       const result = await classesCollection.find().toArray();
+      res.send(result);
+    });
+
+    // get only APPROVED classes
+    app.get('/approved-classes', async (req, res) => {
+      // const query = { status: approved };
+      const result = await classesCollection.find({ status: 'approved' }).toArray()
       res.send(result);
     });
 
