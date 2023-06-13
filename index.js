@@ -3,7 +3,12 @@ const app = express();
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY);
+const stripe = require('stripe')(
+  'sk_test_51NIRnuCm9CwAEL5Y8iEh4ERY3VgKdWqXBo2vLHvASohIG4D685a6UJWpt7AZQOpEa1wdyVdRBo4D5IW2NciuwkyI007S3jamKZ',
+  {
+    maxNetworkRetries: 2, // Retry a request twice before giving up
+  }
+);
 const port = process.env.PORT || 5000;
 
 // middleware
@@ -47,6 +52,7 @@ async function run() {
 
     const usersCollection = client.db('rhythmDB').collection('users');
     const classesCollection = client.db('rhythmDB').collection('classes');
+    const paymentsCollection = client.db('rhythmDB').collection('payments');
 
     app.post('/jwt', (req, res) => {
       const user = req.body;
@@ -194,8 +200,14 @@ async function run() {
       const user = await usersCollection.findOne(query);
       const selectedClassId = user.selectedClassId;
       const convertedId = selectedClassId.map((id) => new ObjectId(id));
-      console.log(convertedId);
+      // console.log(convertedId);
       const result = await classesCollection.find({ _id: { $in: convertedId } }).toArray();
+      res.send(result);
+    });
+
+    // get all instructors
+    app.get('/instructors', async (req, res) => {
+      const result = await usersCollection.find({ role: 'instructor' }).toArray();
       res.send(result);
     });
 
@@ -267,26 +279,45 @@ async function run() {
     //                      PAYMENT RELATED API
     // ========================/    /===========================================
 
-    // create payment intent
-    app.post('/create-payment-intent', async(req, res) => {
-      const {price} = req.body;
-      const amount = price*100
+    // create payment intent verify user and verify student
+    app.post('/create-payment-intent', verifyJWT, verifyStudent, async (req, res) => {
+      const { price } = req.body;
+      const amount = parseFloat(price * 100);
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
         currency: 'usd',
-        payment_method_types: ['card']
-      })
-      
+        payment_method_types: ['card'],
+      });
+      // console.log(paymentIntent);
       res.send({
-        clientSecret: paymentIntent.client_secret
-      })
-    })
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
 
+    // store payment data
+    app.post('/student/payments', async (req, res) => {
+      const payment = req.body;
+      const result = await paymentsCollection.insertOne(payment);
 
+      // Update the class collection
+      const classId = payment.classId;
+      await classesCollection.updateOne(
+        { _id: new ObjectId(classId) },
+        { $inc: { seats: -1 , enrolled: 1 } }
+      );
 
+      // Update the user collection
+      const userEmail = payment.email;
+      const query = { email: userEmail };
+      const updateSelectedClassId = {
+        $pull: {
+          selectedClassId: classId,
+        },
+      };
+      await usersCollection.updateOne(query, updateSelectedClassId);
 
-
-
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db('admin').command({ ping: 1 });
