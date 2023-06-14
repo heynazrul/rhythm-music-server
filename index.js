@@ -193,16 +193,31 @@ async function run() {
       res.send(result);
     });
 
+    // Delete student selected classId in usersCollection
+    app.delete('/users/selectedClassId/:email/:classId', verifyJWT, verifyStudent, async (req, res) => {
+      const email = req.params.email;
+      const classId = req.params.classId;
+      const filter = { email: email };
+      const updateDoc = {
+        $pull: {
+          selectedClassId: classId,
+        },
+      };
+
+      const result = await usersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
     // get selected classId by of requested user
-    app.get('/users/selectedClassId/:email', verifyJWT, async (req, res) => {
+    app.get('/users/selectedClassId/:email', verifyJWT, verifyStudent, async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
       const user = await usersCollection.findOne(query);
       const selectedClassId = user.selectedClassId;
-      // console.log(!selectedClassId);
-      // if(!selectedClassId) {
-      //   return
-      // }
+      if (!selectedClassId) {
+        // Update the user document to add an empty selectedClassId array
+        await usersCollection.updateOne(query, { $set: { selectedClassId: [] } });
+      }
       const convertedId = selectedClassId.map((id) => new ObjectId(id));
       // console.log(convertedId);
       const result = await classesCollection.find({ _id: { $in: convertedId } }).toArray();
@@ -210,12 +225,20 @@ async function run() {
     });
 
     // student only route get enrolled class
-    app.get('/student/enrolled-classes/:email', async (req, res) => {
+    app.get('/student/enrolled-classes/:email', verifyJWT, verifyStudent, async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
       const user = await usersCollection.findOne(query);
-      const enrolledClassId = user.enrolledClassId;
-      const convertedId = enrolledClassId.map((id) => new ObjectId(id));
+      console.log(user);
+      let enrolledClassId = user?.enrolledClassId;
+      console.log('enrolledClassId', enrolledClassId);
+      if (!enrolledClassId) {
+        // Update the user document to add an empty enrolledClassId array
+        await usersCollection.updateOne(query, { $set: { enrolledClassId: [] } });
+      }
+
+      const convertedId = enrolledClassId?.map((id) => new ObjectId(id));
+      console.log('convertedId', convertedId);
       const result = await classesCollection.find({ _id: { $in: convertedId } }).toArray();
       res.send(result);
     });
@@ -239,6 +262,15 @@ async function run() {
     // get only APPROVED classes
     app.get('/approved-classes', async (req, res) => {
       const result = await classesCollection.find({ status: 'approved' }).toArray();
+      res.send(result);
+    });
+
+    // instructor only route get myclass
+    app.get('/instructor/my-classes/:email', verifyJWT, verifyInstructor, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      // const user = await usersCollection.findOne(query);
+      const result = await classesCollection.find(query).toArray();
       res.send(result);
     });
 
@@ -331,6 +363,14 @@ async function run() {
       await usersCollection.updateOne(query, updateSelectedClassId);
 
       res.send(result);
+    });
+
+    // get only requested student payment History
+    app.get('/student/payment-history/:email', verifyJWT, verifyStudent, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const payments = await paymentsCollection.find(query).sort({ date: -1 }).toArray();
+      res.send(payments);
     });
 
     // Send a ping to confirm a successful connection
